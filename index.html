@@ -1,6 +1,104 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>納品書管理ツール</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        video, canvas {
+            display: block;
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+            border-radius: 0.5rem;
+            background-color: #e2e8f0;
+            margin: 0 auto;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">納品書管理ツール</h1>
+        <!-- Image Input Section -->
+        <div class="mb-8 p-6 bg-gray-50 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">納品書画像入力</h2>
+            <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+                <button id="openCamera" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg">カメラを開く</button>
+                <label for="fileUpload" class="bg-gray-400 text-white px-6 py-3 rounded-full font-semibold shadow-lg text-center cursor-pointer">
+                    画像ファイルからアップロード
+                    <input type="file" id="fileUpload" accept="image/*" class="hidden">
+                </label>
+            </div>
+            <div id="cameraSection" class="mb-4">
+                <video id="video" autoplay class="mb-4" style="display:none;"></video>
+                <canvas id="canvas" style="display:none;"></canvas>
+                <button id="takePhoto" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full" style="display:none;">納品書を撮影</button>
+            </div>
+        </div>
+        <!-- Captured/Uploaded Image Section -->
+        <div id="capturedImageSection" class="mb-8 p-6 bg-gray-50 rounded-lg shadow-md" style="display:none;">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">撮影/アップロードした納品書</h2>
+            <img id="capturedImage" src="" alt="Captured Delivery Note" class="mb-4">
+<button id="downloadImageBtn" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full mb-2">画像として保存</button>
+            <div id="extractedInfo" class="space-y-4">
+                <div>
+                    <label for="deliveryDate" class="block text-gray-700 text-sm font-bold mb-2">日付:</label>
+                    <input type="text" id="deliveryDate" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 2023/04/01">
+                </div>
+                <div>
+                    <label for="productType" class="block text-gray-700 text-sm font-bold mb-2">品種:</label>
+                    <input type="text" id="productType" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 生コンクリート">
+                </div>
+                <div>
+                    <label for="projectName" class="block text-gray-700 text-sm font-bold mb-2">工事名（荷受人）:</label>
+                    <input type="text" id="projectName" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 新築工事現場">
+                </div>
+                <div>
+                    <label for="netQuantity" class="block text-gray-700 text-sm font-bold mb-2">正味（数量）:</label>
+                    <input type="number" id="netQuantity" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 8000 (kg)">
+                </div>
+                <button id="saveDeliveryNote" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full" disabled>納品書を保存</button>
+                <div id="saveMessage" class="p-4 mt-4 rounded-lg text-sm" style="display:none;"></div>
+            </div>
+        </div>
+        <!-- Saved Delivery Notes Section -->
+        <div class="p-6 bg-gray-50 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">保存された納品書</h2>
+            <div id="loadingDeliveryNotes" class="text-center text-gray-500 mb-4" style="display:none;">納品書を読み込み中...</div>
+            <ul id="deliveryNoteList" class="space-y-4"></ul>
+            <div id="noDeliveryNotesMessage" class="text-center text-gray-500" style="display:none;">まだ納品書がありません。</div>
+            <div class="flex flex-col sm:flex-row justify-center gap-4 mt-6">
+                <button id="exportCsvButton" class="bg-gray-400 text-white px-6 py-3 rounded-full font-semibold shadow-lg flex-1" disabled>CSVエクスポート</button>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
+<html lang="ja">
+<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>納品書管理ツール</title>
