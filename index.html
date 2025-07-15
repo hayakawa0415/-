@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>納品書管理ツール</title>
+  <!-- Tailwind CSS CDN（本番運用はnpm推奨） -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase v11 CDN -->
+  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore-compat.js"></script>
+  <!-- Gemini Vision OCR（仮：実際はAPIキー等必要） -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-100 p-4">
+  <div class="max-w-xl mx-auto bg-white rounded shadow p-6">
+    <h1 class="text-xl font-bold mb-4">納品書管理ツール</h1>
+    <form id="noteForm" class="space-y-2">
+      <input type="date" id="date" class="border rounded px-2 py-1 w-full" required>
+      <input type="text" id="productType" placeholder="品種" class="border rounded px-2 py-1 w-full" required>
+      <input type="text" id="projectName" placeholder="工事名" class="border rounded px-2 py-1 w-full" required>
+      <input type="number" id="netQuantity" placeholder="正味重量(kg)" class="border rounded px-2 py-1 w-full" required>
+      <input type="file" id="imageInput" accept="image/*" class="w-full" style="display:none">
+      <button type="button" id="cameraBtn" class="bg-pink-500 text-white px-3 py-1 rounded">カメラで撮影</button>
+      <button type="button" id="ocrBtn" class="bg-blue-500 text-white px-3 py-1 rounded">画像OCR</button>
+      <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded">登録</button>
+      <button type="button" id="outputImageBtn" class="bg-yellow-500 text-white px-3 py-1 rounded">画像データ出力</button>
+    </form>
+    <div id="ocrResult" class="mt-2 text-xs text-gray-600"></div>
+    <hr class="my-4">
+    <button type="button" id="csvExportBtn" class="bg-indigo-500 text-white px-3 py-1 rounded mb-2">CSV出力</button>
+    <div id="notesList"></div>
+  </div>
+  <script src="app.js"></script>
+    const db = firebase.firestore();
+
+    // 匿名認証
+    auth.signInAnonymously().catch(console.error);
+
+    // 納品書登録
+    document.getElementById('noteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const date = document.getElementById('date').value;
+      const productType = document.getElementById('productType').value;
+      const projectName = document.getElementById('projectName').value;
+      const netQuantity = Number(document.getElementById('netQuantity').value);
+      const imageInput = document.getElementById('imageInput');
+      let imageData = '';
+      if (imageInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = async function(evt) {
+          imageData = evt.target.result;
+          await saveNote({date, productType, projectName, netQuantity, imageData});
+        };
+        reader.readAsDataURL(imageInput.files[0]);
+      } else {
+        await saveNote({date, productType, projectName, netQuantity, imageData});
+      }
+    });
+
+    async function saveNote(note) {
+      const user = auth.currentUser;
+      if (!user) return alert('認証エラー');
+      const ref = db.collection(`artifacts/__app_id/users/${user.uid}/deliveryNotes`);
+      await ref.add({
+        ...note,
+        timestamp: new Date().toISOString()
+      });
+      alert('登録完了');
+      loadNotes();
+    }
+
+    // 納品書一覧取得
+    async function loadNotes() {
+      const user = auth.currentUser;
+      if (!user) return;
+      const ref = db.collection(`artifacts/__app_id/users/${user.uid}/deliveryNotes`).orderBy('date', 'desc');
+      const snap = await ref.get();
+      const notes = snap.docs.map(doc => doc.data());
+      const list = document.getElementById('notesList');
+      list.innerHTML = notes.map(n =>
+        `<div class="border-b py-2">
+          <div>日付: ${n.date}</div>
+          <div>品種: ${n.productType}</div>
+          <div>工事名: ${n.projectName}</div>
+          <div>重量: ${n.netQuantity}kg</div>
+          ${n.imageData ? `<img src="${n.imageData}" class="h-16 mt-1">` : ''}
+        </div>`
+      ).join('');
+    }
+    auth.onAuthStateChanged(loadNotes);
+
+    // 画像OCR（ダミー実装）
+    document.getElementById('ocrBtn').addEventListener('click', () => {
+      const imageInput = document.getElementById('imageInput');
+      if (!imageInput.files[0]) return alert('画像を選択してください');
+      // ここにGemini Vision OCR呼び出しを実装
+      document.getElementById('ocrResult').textContent = 'OCR結果: (ここに抽出テキスト)';
+    });
+  </script>
+</body>
+</html>
