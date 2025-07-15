@@ -45,7 +45,7 @@ takePhotoBtn.addEventListener('click', () => {
   const imageData = canvas.toDataURL('image/png');
   capturedImage.src = imageData;
   capturedImageSection.style.display = 'block';
-  // カメラ停止
+  // --- カメラ＆画像管理＋OCR（Tesseract.js） ---
   const stream = video.srcObject;
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
@@ -194,6 +194,54 @@ exportCsvButton.addEventListener('click', () => {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+});
+
+// OCRボタン生成・イベント追加
+const ocrProgress = document.createElement('div');
+ocrProgress.id = 'ocrProgress';
+ocrProgress.className = 'text-center text-blue-600 mb-2';
+document.getElementById('capturedImageSection').insertBefore(ocrProgress, capturedImage.nextSibling);
+
+const ocrBtn = document.createElement('button');
+ocrBtn.id = 'ocrBtn';
+ocrBtn.textContent = '画像から文字データ抽出（OCR）';
+ocrBtn.className = 'bg-blue-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full mb-2';
+document.getElementById('capturedImageSection').insertBefore(ocrBtn, downloadImageBtn);
+
+ocrBtn.addEventListener('click', async () => {
+  if (!capturedImage.src) {
+    showMessage('画像がありません', 'error');
+    return;
+  }
+  ocrProgress.textContent = 'OCR処理中...';
+  try {
+    const result = await Tesseract.recognize(capturedImage.src, 'jpn', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          ocrProgress.textContent = `OCR進行中: ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+    ocrProgress.textContent = 'OCR完了';
+    // 結果を入力欄に反映（簡易パターンマッチ）
+    const text = result.data.text;
+    // 日付（YYYY/MM/DD）
+    const dateMatch = text.match(/\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/);
+    if(dateMatch) deliveryDateInput.value = dateMatch[0].replace(/\-/g, '/');
+    // 品種（例: 生コンクリートなど）
+    const productMatch = text.match(/品種[:：]?\s*(\S+)/);
+    if(productMatch) productTypeInput.value = productMatch[1];
+    // 工事名（「工事名」または「荷受人」）
+    const projectMatch = text.match(/(?:工事名|荷受人)[:：]?\s*(\S+)/);
+    if(projectMatch) projectNameInput.value = projectMatch[1];
+    // 正味（数量）kg
+    const netMatch = text.match(/正味[:：]?\s*([\d,\.]+)/);
+    if(netMatch) netQuantityInput.value = netMatch[1].replace(/,/g, '');
+    showMessage('OCR結果を入力欄に反映しました', 'success');
+  } catch (e) {
+    ocrProgress.textContent = '';
+    showMessage('OCR処理に失敗しました', 'error');
+  }
 });
 
 // 画像として保存ボタン

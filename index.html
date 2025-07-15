@@ -61,6 +61,8 @@
         <div id="capturedImageSection" class="mb-8 p-6 bg-gray-50 rounded-lg shadow-md" style="display:none;">
             <h2 class="text-2xl font-semibold text-gray-700 mb-4">撮影/アップロードした納品書</h2>
             <img id="capturedImage" src="" alt="Captured Delivery Note" class="mb-4">
+<div id="ocrProgress" class="text-center text-blue-600 mb-2"></div>
+<button id="ocrBtn" class="bg-blue-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full mb-2">画像から文字データ抽出（OCR）</button>
 <button id="downloadImageBtn" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full mb-2">画像として保存</button>
             <div id="extractedInfo" class="space-y-4">
                 <div>
@@ -93,6 +95,10 @@
                 <button id="exportCsvButton" class="bg-gray-400 text-white px-6 py-3 rounded-full font-semibold shadow-lg flex-1" disabled>CSVエクスポート</button>
             </div>
         </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
     </div>
     <script src="app.js"></script>
 </body>
