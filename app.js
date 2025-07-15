@@ -71,7 +71,10 @@ const cameraBtn = document.getElementById('cameraBtn');
 if (cameraBtn) {
   cameraBtn.addEventListener('click', () => {
     const imageInput = document.getElementById('imageInput');
-    if (imageInput) imageInput.click();
+    if (imageInput) {
+      imageInput.value = '';
+      imageInput.click();
+    }
   });
 }
 

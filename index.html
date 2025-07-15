@@ -21,8 +21,8 @@
       <input type="text" id="productType" placeholder="品種" class="border rounded px-2 py-1 w-full" required>
       <input type="text" id="projectName" placeholder="工事名" class="border rounded px-2 py-1 w-full" required>
       <input type="number" id="netQuantity" placeholder="正味重量(kg)" class="border rounded px-2 py-1 w-full" required>
-      <input type="file" id="imageInput" accept="image/*" class="w-full" style="display:none">
-      <button type="button" id="cameraBtn" class="bg-pink-500 text-white px-3 py-1 rounded">カメラで撮影</button>
+      <input type="file" id="imageInput" accept="image/*" capture="environment" class="w-full" style="display:none">
+      <button type="button" id="cameraBtn" class="bg-gray-500 text-white px-3 py-1 rounded">カメラで撮影</button>
       <button type="button" id="ocrBtn" class="bg-blue-500 text-white px-3 py-1 rounded">画像OCR</button>
       <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded">登録</button>
       <button type="button" id="outputImageBtn" class="bg-yellow-500 text-white px-3 py-1 rounded">画像データ出力</button>
