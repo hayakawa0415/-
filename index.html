@@ -1,207 +1,139 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>納品書管理ツール</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f2f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 2rem;
-            background-color: #ffffff;
-            border-radius: 1rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        video, canvas {
-            display: block;
-            width: 100%;
-            max-width: 600px;
-            height: auto;
-            border-radius: 0.5rem;
-            background-color: #e2e8f0;
-            margin: 0 auto;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 0.5rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin-top: 1rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">納品書管理ツール</h1>
-        <!-- Image Input Section -->
-        <div class="mb-8 p-6 bg-gray-50 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">納品書画像入力</h2>
-            <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
-                <button id="openCamera" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg">カメラを開く</button>
-                <label for="fileUpload" class="bg-gray-400 text-white px-6 py-3 rounded-full font-semibold shadow-lg text-center cursor-pointer">
-                    画像ファイルからアップロード
-                    <input type="file" id="fileUpload" accept="image/*" class="hidden">
-                </label>
-            </div>
-            <div id="cameraSection" class="mb-4">
-                <video id="video" autoplay class="mb-4" style="display:none;"></video>
-                <canvas id="canvas" style="display:none;"></canvas>
-                <button id="takePhoto" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full" style="display:none;">納品書を撮影</button>
-            </div>
-        </div>
-        <!-- Captured/Uploaded Image Section -->
-        <div id="capturedImageSection" class="mb-8 p-6 bg-gray-50 rounded-lg shadow-md" style="display:none;">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">撮影/アップロードした納品書</h2>
-            <img id="capturedImage" src="" alt="Captured Delivery Note" class="mb-4">
-<div id="ocrProgress" class="text-center text-blue-600 mb-2"></div>
-<button id="ocrBtn" class="bg-blue-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full mb-2">画像から文字データ抽出（OCR）</button>
-<button id="downloadImageBtn" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full mb-2">画像として保存</button>
-            <div id="extractedInfo" class="space-y-4">
-                <div>
-                    <label for="deliveryDate" class="block text-gray-700 text-sm font-bold mb-2">日付:</label>
-                    <input type="text" id="deliveryDate" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 2023/04/01">
-                </div>
-                <div>
-                    <label for="productType" class="block text-gray-700 text-sm font-bold mb-2">品種:</label>
-                    <input type="text" id="productType" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 生コンクリート">
-                </div>
-                <div>
-                    <label for="projectName" class="block text-gray-700 text-sm font-bold mb-2">工事名（荷受人）:</label>
-                    <input type="text" id="projectName" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 新築工事現場">
-                </div>
-                <div>
-                    <label for="netQuantity" class="block text-gray-700 text-sm font-bold mb-2">正味（数量）:</label>
-                    <input type="number" id="netQuantity" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="例: 8000 (kg)">
-                </div>
-                <button id="saveDeliveryNote" class="bg-gray-500 text-white px-6 py-3 rounded-full font-semibold shadow-lg w-full" disabled>納品書を保存</button>
-                <div id="saveMessage" class="p-4 mt-4 rounded-lg text-sm" style="display:none;"></div>
-            </div>
-        </div>
-        <!-- Saved Delivery Notes Section -->
-        <div class="p-6 bg-gray-50 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">保存された納品書</h2>
-            <div id="loadingDeliveryNotes" class="text-center text-gray-500 mb-4" style="display:none;">納品書を読み込み中...</div>
-            <ul id="deliveryNoteList" class="space-y-4"></ul>
-            <div id="noDeliveryNotesMessage" class="text-center text-gray-500" style="display:none;">まだ納品書がありません。</div>
-            <div class="flex flex-col sm:flex-row justify-center gap-4 mt-6">
-                <button id="exportCsvButton" class="bg-gray-400 text-white px-6 py-3 rounded-full font-semibold shadow-lg flex-1" disabled>CSVエクスポート</button>
-            </div>
-        </div>
-    </div>
-    <script src="app.js"></script>
-</body>
-</html>
-    </div>
-    <script src="app.js"></script>
-</body>
-</html>
-<html lang="ja">
-<head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>納品書管理ツール</title>
-  <!-- Tailwind CSS CDN（本番運用はnpm推奨） -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Firebase v11 CDN -->
-  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore-compat.js"></script>
-  <!-- Gemini Vision OCR（仮：実際はAPIキー等必要） -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f4e79">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="納品書">
+  <title>納品書管理</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-gray-100 p-4">
-  <div class="max-w-xl mx-auto bg-white rounded shadow p-6">
-    <h1 class="text-xl font-bold mb-4">納品書管理ツール</h1>
-    <form id="noteForm" class="space-y-2">
-      <input type="date" id="date" class="border rounded px-2 py-1 w-full" required>
-      <input type="text" id="productType" placeholder="品種" class="border rounded px-2 py-1 w-full" required>
-      <input type="text" id="projectName" placeholder="工事名" class="border rounded px-2 py-1 w-full" required>
-      <input type="number" id="netQuantity" placeholder="正味重量(kg)" class="border rounded px-2 py-1 w-full" required>
-      <input type="file" id="imageInput" accept="image/*" capture="environment" class="w-full" style="display:none">
-      <button type="button" id="cameraBtn" class="bg-gray-500 text-white px-3 py-1 rounded">カメラで撮影</button>
-      <button type="button" id="ocrBtn" class="bg-blue-500 text-white px-3 py-1 rounded">画像OCR</button>
-      <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded">登録</button>
-      <button type="button" id="outputImageBtn" class="bg-yellow-500 text-white px-3 py-1 rounded">画像データ出力</button>
-    </form>
-    <div id="ocrResult" class="mt-2 text-xs text-gray-600"></div>
-    <hr class="my-4">
-    <button type="button" id="csvExportBtn" class="bg-indigo-500 text-white px-3 py-1 rounded mb-2">CSV出力</button>
-    <div id="notesList"></div>
-  </div>
-  <script src="app.js"></script>
-    const db = firebase.firestore();
+<body>
+  <header class="topbar">
+    <h1>納品書管理</h1>
+    <label class="site-picker">
+      <span>現場</span>
+      <select id="currentSite" aria-label="現在の現場"></select>
+    </label>
+  </header>
 
-    // 匿名認証
-    auth.signInAnonymously().catch(console.error);
+  <main>
+    <!-- 撮影 -->
+    <section id="tab-capture" class="tab active" aria-label="撮影">
+      <div class="capture-buttons">
+        <label class="btn btn-primary btn-big">
+          <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
+          <span class="icon" aria-hidden="true">📷</span> 納品書を撮影
+        </label>
+        <label class="btn btn-secondary">
+          <input id="fileInput" type="file" accept="image/*" multiple hidden>
+          写真を選ぶ（複数可）
+        </label>
+      </div>
+      <p class="hint">伝票を平らな所に置き、枠いっぱいに1枚ずつ撮ると読み取り精度が上がります。続けて何枚でも撮影できます。</p>
+      <div id="aiStatus" class="notice" hidden></div>
+      <div class="queue-head" id="queueHead" hidden>
+        <h2>確認待ち <span id="queueCount"></span></h2>
+        <button id="saveAllBtn" class="btn btn-small btn-primary" type="button">確認済みを全部保存</button>
+      </div>
+      <div id="queue" class="queue"></div>
+      <p id="emptyQueue" class="empty">撮影した伝票はここに並びます。<br>AIが読み取った内容を確認し、「保存」してください。</p>
+    </section>
 
-    // 納品書登録
-    document.getElementById('noteForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const date = document.getElementById('date').value;
-      const productType = document.getElementById('productType').value;
-      const projectName = document.getElementById('projectName').value;
-      const netQuantity = Number(document.getElementById('netQuantity').value);
-      const imageInput = document.getElementById('imageInput');
-      let imageData = '';
-      if (imageInput.files[0]) {
-        const reader = new FileReader();
-        reader.onload = async function(evt) {
-          imageData = evt.target.result;
-          await saveNote({date, productType, projectName, netQuantity, imageData});
-        };
-        reader.readAsDataURL(imageInput.files[0]);
-      } else {
-        await saveNote({date, productType, projectName, netQuantity, imageData});
-      }
-    });
+    <!-- 一覧 -->
+    <section id="tab-list" class="tab" aria-label="伝票一覧">
+      <div class="filters">
+        <label>現場 <select id="listSite"></select></label>
+        <label>月 <input id="listMonth" type="month"></label>
+      </div>
+      <div id="listSummary" class="summary"></div>
+      <div id="list"></div>
+    </section>
 
-    async function saveNote(note) {
-      const user = auth.currentUser;
-      if (!user) return alert('認証エラー');
-      const ref = db.collection(`artifacts/__app_id/users/${user.uid}/deliveryNotes`);
-      await ref.add({
-        ...note,
-        timestamp: new Date().toISOString()
-      });
-      alert('登録完了');
-      loadNotes();
-    }
+    <!-- 集計・出力 -->
+    <section id="tab-ledger" class="tab" aria-label="集計・出力">
+      <div class="filters">
+        <label>現場 <select id="ledgerSite"></select></label>
+        <label>材料 <select id="ledgerMaterial"></select></label>
+      </div>
+      <p class="hint">「使用量」はここで入力できます（Excelの「使用量 日計」に入ります）。</p>
+      <div class="ledger-wrap"><table id="ledger" class="ledger"></table></div>
 
-    // 納品書一覧取得
-    async function loadNotes() {
-      const user = auth.currentUser;
-      if (!user) return;
-      const ref = db.collection(`artifacts/__app_id/users/${user.uid}/deliveryNotes`).orderBy('date', 'desc');
-      const snap = await ref.get();
-      const notes = snap.docs.map(doc => doc.data());
-      const list = document.getElementById('notesList');
-      list.innerHTML = notes.map(n =>
-        `<div class="border-b py-2">
-          <div>日付: ${n.date}</div>
-          <div>品種: ${n.productType}</div>
-          <div>工事名: ${n.projectName}</div>
-          <div>重量: ${n.netQuantity}kg</div>
-          ${n.imageData ? `<img src="${n.imageData}" class="h-16 mt-1">` : ''}
-        </div>`
-      ).join('');
-    }
-    auth.onAuthStateChanged(loadNotes);
+      <h2>出力</h2>
+      <div class="filters">
+        <label>対象 <select id="exportSite"></select></label>
+      </div>
+      <div class="export-buttons">
+        <button class="btn btn-primary" data-export="excel" type="button">Excel集計表</button>
+        <button class="btn btn-secondary" data-export="pdf" type="button">写真台帳PDF（A4に3枚）</button>
+        <button class="btn btn-secondary" data-export="zip" type="button">写真ZIP＋Excel</button>
+      </div>
+      <p id="exportStatus" class="hint" aria-live="polite"></p>
+    </section>
 
-    // 画像OCR（ダミー実装）
-    document.getElementById('ocrBtn').addEventListener('click', () => {
-      const imageInput = document.getElementById('imageInput');
-      if (!imageInput.files[0]) return alert('画像を選択してください');
-      // ここにGemini Vision OCR呼び出しを実装
-      document.getElementById('ocrResult').textContent = 'OCR結果: (ここに抽出テキスト)';
-    });
-  </script>
+    <!-- 設定 -->
+    <section id="tab-settings" class="tab" aria-label="設定">
+      <h2>現場の登録</h2>
+      <p class="hint">伝票の「工事名」から自動で現場を振り分けます。正式名称で登録してください。</p>
+      <form id="siteForm" class="inline-form">
+        <input id="siteName" type="text" placeholder="例: 出光興産研究拠点再構築プロジェクト" required>
+        <button class="btn btn-primary btn-small" type="submit">追加</button>
+      </form>
+      <ul id="siteList" class="site-list"></ul>
+
+      <h2>AI読み取り</h2>
+      <label class="field">パスコード（管理者から聞いたもの）
+        <input id="passcode" type="password" autocomplete="off">
+      </label>
+      <label class="check"><input id="autoRead" type="checkbox" checked> 撮影したら自動で読み取る</label>
+
+      <h2>データの保管</h2>
+      <p id="storageInfo" class="hint"></p>
+      <p class="hint warn">データはこの端末のブラウザ内に保存されています。機種変更・ブラウザのデータ削除で消えるため、週1回程度バックアップを保存してください（Googleドライブ等へ）。</p>
+      <div class="export-buttons">
+        <button id="backupBtn" class="btn btn-secondary" type="button">バックアップを保存</button>
+        <label class="btn btn-secondary">
+          <input id="restoreInput" type="file" accept=".zip,application/zip" hidden>
+          バックアップから復元
+        </label>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="メニュー">
+    <button data-tab="capture" class="active" type="button"><span aria-hidden="true">📷</span>撮影<b id="badge" hidden></b></button>
+    <button data-tab="list" type="button"><span aria-hidden="true">📄</span>一覧</button>
+    <button data-tab="ledger" type="button"><span aria-hidden="true">📊</span>集計・出力</button>
+    <button data-tab="settings" type="button"><span aria-hidden="true">⚙️</span>設定</button>
+  </nav>
+
+  <dialog id="dialog"></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <template id="slipFormTpl">
+    <div class="grid">
+      <label>現場<select name="siteId"></select></label>
+      <label>日付<input name="date" type="date" required></label>
+      <label>材料(品種)<input name="material" list="materialList" required></label>
+      <label>伝票番号<input name="slipNo" inputmode="text"></label>
+      <label>正味(kg)<input name="netKg" type="number" inputmode="decimal" step="any" required></label>
+      <label>全重(kg)<input name="grossKg" type="number" inputmode="decimal" step="any"></label>
+      <label>風袋(kg)<input name="tareKg" type="number" inputmode="decimal" step="any"></label>
+      <label>袋数<input name="bags" type="number" inputmode="numeric"></label>
+      <label>運送会社<input name="carrier"></label>
+      <label>車番<input name="vehicleNo"></label>
+      <label>出荷場所<input name="origin"></label>
+      <label>販売店・荷主<input name="supplier"></label>
+      <label class="wide">伝票の工事名<input name="projectNameRead"></label>
+      <label class="wide">備考<input name="note"></label>
+    </div>
+  </template>
+  <datalist id="materialList"></datalist>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>

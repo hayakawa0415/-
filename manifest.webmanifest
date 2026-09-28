@@ -1,0 +1,16 @@
+{
+  "name": "納品書管理",
+  "short_name": "納品書",
+  "description": "納品書を撮影してAIで読み取り、現場別にExcel集計・写真台帳を作成",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f8",
+  "theme_color": "#1f4e79",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

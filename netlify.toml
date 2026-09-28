@@ -3,9 +3,14 @@
   command = ""
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "22"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# service worker は常に最新を取得させる
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
