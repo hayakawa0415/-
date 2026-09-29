@@ -88,19 +88,9 @@ export function safeName(s, max = 60) {
 export function photoPath(site, recs) {
   const first = sortRecords(recs)[0];
   const date = first?.date || "日付不明";
-  const nos = recs.map((r) => r.slipNo).filter(Boolean).join("-") || "番号なし";
   const kg = recs.map((r) => (r.netKg != null ? `${r.netKg}kg` : "")).filter(Boolean).join("-");
-  const base = safeName([date, `No${nos}`, first?.material, kg].filter(Boolean).join("_"), 100);
+  const base = safeName([date, first?.material, kg].filter(Boolean).join("_"), 100);
   return `${safeName(site?.name ?? "現場未設定")}/${date.slice(0, 7)}/${base}_${first?.photoId?.slice(0, 4) ?? ""}.jpg`;
-}
-
-// 伝票番号＋日付＋現場が同じものを重複候補とみなす
-export function findDuplicate(records, rec) {
-  if (!rec.slipNo) return null;
-  const norm = (s) => String(s).replace(/^0+/, "").replace(/\s/g, "").toUpperCase();
-  return records.find(
-    (r) => r.id !== rec.id && r.siteId === rec.siteId && r.date === rec.date && norm(r.slipNo) === norm(rec.slipNo),
-  ) ?? null;
 }
 
 // AI が返した工事名を登録現場に当てる（AI の matched_site_index が無い時の補助）

@@ -109,7 +109,6 @@ function addLedgerSheet(wb, site, material, rows) {
     row.loads.forEach((rec, j) => {
       const cell = ws.getCell(r, cLoad1 + j);
       cell.value = rec.netKg ?? null;
-      if (rec.slipNo) cell.note = `伝票No.${rec.slipNo}`;
     });
     const loadRange = `${L(cLoad1)}${r}:${L(cLoadN)}${r}`;
     const prev = (col) => (i === 0 ? "" : `${L(col)}${r - 1}+`);
@@ -137,7 +136,7 @@ function addLedgerSheet(wb, site, material, rows) {
   for (const col of [c.cntDay, c.cntCum]) ws.getColumn(col).width = 6;
   for (const col of [c.inDay, c.inCum, c.useDay, c.useCum, c.remain]) ws.getColumn(col).width = 10;
   ws.getCell(rows.length + 6, 1).value =
-    "※黄色の「使用量 日計」は入力欄です。累計・残量は数式で自動計算されます。搬入量のセルにカーソルを合わせると伝票番号が見られます。";
+    "※黄色の「使用量 日計」は入力欄です。累計・残量は数式で自動計算されます。";
   ws.getCell(rows.length + 6, 1).font = { size: 9, color: { argb: "FF555555" } };
   return ws;
 }
@@ -150,18 +149,12 @@ function addDetailSheet(wb, sites, records, photoPaths) {
     { header: "年月", key: "ym", width: 9 },
     { header: "日付", key: "date", width: 11, style: { numFmt: "yyyy/mm/dd" } },
     { header: "材料(品種)", key: "material", width: 14 },
-    { header: "伝票番号", key: "slipNo", width: 10 },
     { header: "正味(kg)", key: "netKg", width: 10, style: { numFmt: KG } },
     { header: "全重(kg)", key: "grossKg", width: 10, style: { numFmt: KG } },
     { header: "風袋(kg)", key: "tareKg", width: 10, style: { numFmt: KG } },
     { header: "袋数", key: "bags", width: 6 },
     { header: "運送会社", key: "carrier", width: 18 },
     { header: "車番", key: "vehicleNo", width: 8 },
-    { header: "出荷場所", key: "origin", width: 16 },
-    { header: "販売店・荷主", key: "supplier", width: 20 },
-    { header: "納入先", key: "consignee", width: 14 },
-    { header: "伝票の工事名(読取値)", key: "projectNameRead", width: 28 },
-    { header: "伝票種別", key: "documentType", width: 8 },
     { header: "入力方法", key: "source", width: 10 },
     { header: "備考", key: "note", width: 24 },
     { header: "写真ファイル", key: "photo", width: 40 },
@@ -173,7 +166,7 @@ function addDetailSheet(wb, sites, records, photoPaths) {
       site: siteName.get(r.siteId) ?? "（現場未設定）",
       ym: r.date ? r.date.slice(0, 7) : "",
       date: toDate(r.date),
-      source: r.source === "ai" ? (r.edited ? "AI+手修正" : "AI読取") : "手入力",
+      source: { ai: "AI読取", ocr: "自動読取" }[r.source] ? `${{ ai: "AI読取", ocr: "自動読取" }[r.source]}${r.edited ? "+手修正" : ""}` : "手入力",
       createdAt: r.createdAt ? new Date(r.createdAt) : null,
       photo: null,
     });
@@ -210,7 +203,7 @@ function addSummarySheet(wb, sites, records, usages, detailRows) {
     row.values = [site.name, material, ym || "合計"];
     row.getCell(4).value = { formula: `COUNTIFS(${crit.join(",")})`, result: recs.length };
     row.getCell(5).value = {
-      formula: `SUMIFS(${D("F")},${crit.join(",")})`,
+      formula: `SUMIFS(${D("E")},${crit.join(",")})`,
       result: recs.reduce((s, x) => s + (Number(x.netKg) || 0), 0),
     };
     row.getCell(6).value = use || null;
@@ -339,7 +332,7 @@ export async function buildPhotoPdf({ sites, records, photos, onProgress }) {
         const [photoId, recs] = slice[i];
         const x = 50 + i * colW;
         const lines = recs.slice(0, 2).map((r) =>
-          `${(r.date ?? "日付不明").replaceAll("-", "/")}　No.${r.slipNo ?? "-"}　${r.material ?? ""}`,
+          `${(r.date ?? "日付不明").replaceAll("-", "/")}　${r.material ?? ""}`,
         );
         lines.splice(1, 0, `正味 ${recs.map((r) => (r.netKg != null ? Number(r.netKg).toLocaleString("ja-JP") : "-")).join(" / ")} kg`);
         drawCaption(ctx, lines, x + 10, 100, colW - 20);

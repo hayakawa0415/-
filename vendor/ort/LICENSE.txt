@@ -1,0 +1,3 @@
+ort.wasm.bundle.min.mjs / ort-wasm-simd-threaded.* : ONNX Runtime Web 1.30.0
+https://github.com/microsoft/onnxruntime
+MIT License, Copyright (c) Microsoft Corporation

@@ -34,14 +34,14 @@
           写真を選ぶ（複数可）
         </label>
       </div>
-      <p class="hint">伝票を平らな所に置き、枠いっぱいに1枚ずつ撮ると読み取り精度が上がります。続けて何枚でも撮影できます。</p>
+      <p class="hint">伝票を平らな所に置き、<strong>縦向きで枠いっぱいに1枚ずつ</strong>撮ってください。正味は自動で読み取ります。続けて何枚でも撮影できます。</p>
       <div id="aiStatus" class="notice" hidden></div>
       <div class="queue-head" id="queueHead" hidden>
         <h2>確認待ち <span id="queueCount"></span></h2>
-        <button id="saveAllBtn" class="btn btn-small btn-primary" type="button">確認済みを全部保存</button>
+        <button id="saveAllBtn" class="btn btn-small btn-primary" type="button">すべて保存</button>
       </div>
       <div id="queue" class="queue"></div>
-      <p id="emptyQueue" class="empty">撮影した伝票はここに並びます。<br>AIが読み取った内容を確認し、「保存」してください。</p>
+      <p id="emptyQueue" class="empty">撮影した伝票はここに並びます。<br>正味を写真と見比べて「保存」してください。</p>
     </section>
 
     <!-- 一覧 -->
@@ -85,11 +85,19 @@
       </form>
       <ul id="siteList" class="site-list"></ul>
 
-      <h2>AI読み取り</h2>
-      <label class="field">パスコード（管理者から聞いたもの）
-        <input id="passcode" type="password" autocomplete="off">
-      </label>
-      <label class="check"><input id="autoRead" type="checkbox" checked> 撮影したら自動で読み取る</label>
+      <h2>自動読み取り</h2>
+      <label class="check"><input id="autoRead" type="checkbox" checked> 撮影したら正味を自動で読み取る（端末内で処理・無料）</label>
+      <p class="hint">住友大阪セメントの納品書（全重・風袋・正味）と、UBE三菱セメントの送り状（正味量）で確認済みです。読み取った値は必ず写真と見比べてください。</p>
+      <details class="advanced">
+        <summary>有料のAI読み取りを使う（任意）</summary>
+        <label class="check"><input id="useAi" type="checkbox"> AI読み取り（Claude API）を使う</label>
+        <div id="aiSettings" hidden>
+          <p class="hint">管理者が Netlify に APIキーを設定した場合のみ使えます（1枚5〜10円程度）。</p>
+          <label class="field">パスコード
+            <input id="passcode" type="password" autocomplete="off">
+          </label>
+        </div>
+      </details>
 
       <h2>データの保管</h2>
       <p id="storageInfo" class="hint"></p>
@@ -115,21 +123,27 @@
   <div id="toast" class="toast" role="status" hidden></div>
 
   <template id="slipFormTpl">
-    <div class="grid">
-      <label>現場<select name="siteId"></select></label>
-      <label>日付<input name="date" type="date" required></label>
-      <label>材料(品種)<input name="material" list="materialList" required></label>
-      <label>伝票番号<input name="slipNo" inputmode="text"></label>
-      <label>正味(kg)<input name="netKg" type="number" inputmode="decimal" step="any" required></label>
-      <label>全重(kg)<input name="grossKg" type="number" inputmode="decimal" step="any"></label>
-      <label>風袋(kg)<input name="tareKg" type="number" inputmode="decimal" step="any"></label>
-      <label>袋数<input name="bags" type="number" inputmode="numeric"></label>
-      <label>運送会社<input name="carrier"></label>
-      <label>車番<input name="vehicleNo"></label>
-      <label>出荷場所<input name="origin"></label>
-      <label>販売店・荷主<input name="supplier"></label>
-      <label class="wide">伝票の工事名<input name="projectNameRead"></label>
-      <label class="wide">備考<input name="note"></label>
+    <div class="slip-form">
+      <div class="grid">
+        <label>現場<select name="siteId"></select></label>
+        <label>日付<input name="date" type="date" required></label>
+        <label class="wide">材料(品種)<input name="material" list="materialList" required></label>
+        <div class="chips wide" data-chips="material"></div>
+        <div class="wide crop" data-crop></div>
+        <label class="wide net">正味(kg)<input name="netKg" type="number" inputmode="numeric" step="any" required></label>
+        <div class="chips wide" data-chips="netKg"></div>
+      </div>
+      <details class="more">
+        <summary>その他の項目（任意）</summary>
+        <div class="grid">
+          <label>全重(kg)<input name="grossKg" type="number" inputmode="numeric" step="any"></label>
+          <label>風袋(kg)<input name="tareKg" type="number" inputmode="numeric" step="any"></label>
+          <label>袋数<input name="bags" type="number" inputmode="numeric"></label>
+          <label>車番<input name="vehicleNo"></label>
+          <label class="wide">運送会社<input name="carrier"></label>
+          <label class="wide">備考<input name="note"></label>
+        </div>
+      </details>
     </div>
   </template>
   <datalist id="materialList"></datalist>

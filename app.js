@@ -1,8 +1,8 @@
-// 納品書管理：撮影 → AI読み取り → 確認・保存 → 現場別集計 / Excel・写真台帳出力
+// 納品書管理：撮影 → 端末内で正味を読み取り → 確認・保存 → 現場別集計 / Excel・写真台帳出力
 import * as db from "./js/db.js";
-import { preparePhoto, rotatePhoto, blobToBase64 } from "./js/image.js";
+import { preparePhoto, rotatePhoto, blobToBase64, cropDataUrl } from "./js/image.js";
 import {
-  buildLedger, materialsOf, sortRecords, todayIso, usageKey, findDuplicate, guessSite,
+  buildLedger, materialsOf, sortRecords, todayIso, usageKey, guessSite,
 } from "./js/ledger.js";
 import {
   buildWorkbook, buildPhotoPdf, buildPhotoZip, buildBackup, readBackup, fileName,
@@ -20,7 +20,7 @@ const state = {
   currentSite: "",
   passcode: "",
   autoRead: true,
-  aiAvailable: true,
+  useAi: false,
   materialAliases: {},
   siteAliases: {},
 };
@@ -215,16 +215,11 @@ async function ingest(files) {
       const { photo, thumb } = await preparePhoto(file);
       const photoId = db.newId();
       await db.put("photos", { id: photoId, blob: photo, thumb, createdAt: new Date().toISOString() });
-      const item = { photoId, status: "manual", slips: [], error: "", message: "" };
+      const item = { photoId, status: "manual", slips: [emptyDraft()], error: "", message: "" };
       state.queue.unshift(item);
-      if (state.autoRead && state.aiAvailable) {
-        item.status = "reading";
-        readItem(item);
-      } else {
-        item.slips = [emptyDraft()];
-      }
       persistQueue();
       renderQueue();
+      if (state.autoRead) readItem(item);
     } catch (e) {
       console.error(e);
       toast(`画像を読み込めませんでした（${file.name}）。HEIC形式の場合は「互換性優先」で撮影してください`);
@@ -243,32 +238,80 @@ $("#fileInput").addEventListener("change", (e) => {
 });
 
 function emptyDraft() {
-  return { siteId: state.currentSite || "", date: todayIso(), material: lastMaterial(), uncertain: [], ai: null };
+  return { siteId: state.currentSite || "", date: todayIso(), material: lastMaterial(state.currentSite), uncertain: [], ai: null, ocr: null };
 }
 
-function lastMaterial() {
-  const recs = state.records.filter((r) => r.siteId === state.currentSite);
+function lastMaterial(siteId) {
+  const recs = state.records.filter((r) => r.siteId === siteId);
   return recs.length ? sortRecords(recs).at(-1).material : "";
 }
 
-// ---------- AI 読み取り ----------
-let running = 0;
-const waiting = [];
-function limit(fn) {
-  return new Promise((resolve, reject) => {
-    const run = async () => {
-      running++;
+// よく使う値（新しい順に重み付けして上位を返す）
+function frequent(values, n) {
+  const score = new Map();
+  values.forEach((v, i) => v != null && v !== "" && score.set(v, (score.get(v) ?? 0) + 1 + i / values.length));
+  return [...score].sort((a, b) => b[1] - a[1]).slice(0, n).map(([v]) => v);
+}
+function materialChips(siteId) {
+  const recs = sortRecords(state.records.filter((r) => r.siteId === siteId));
+  return frequent(recs.map((r) => r.material), 4);
+}
+function netChips(draft) {
+  const recs = sortRecords(state.records.filter((r) => r.siteId === draft.siteId && r.material === draft.material));
+  const ocr = draft.ocr?.candidates ?? [];
+  return [...new Set([...ocr, ...frequent(recs.map((r) => Number(r.netKg)), 4)])].slice(0, 6);
+}
+
+// ---------- 読み取り（端末内の文字認識。設定で有料AIも選べる） ----------
+async function readItem(item) {
+  item.status = "reading";
+  item.error = "";
+  updateCard(item);
+  try {
+    if (state.useAi) {
       try {
-        resolve(await fn());
+        await readItemAi(item);
+        return;
       } catch (e) {
-        reject(e);
-      } finally {
-        running--;
-        waiting.shift()?.();
+        item.message = `AI読み取りに失敗したため端末内で読み取ります（${e.message}）`;
       }
-    };
-    running < 2 ? run() : waiting.push(run);
-  });
+    }
+    await readItemLocal(item);
+  } catch (e) {
+    console.error(e);
+    item.status = "manual";
+    item.error = `自動読み取りできませんでした（${e.message}）。正味を入力してください`;
+  } finally {
+    persistQueue();
+    updateCard(item);
+  }
+}
+
+async function readItemLocal(item) {
+  const ready = await db.getMeta("ocrReady", false);
+  if (!ready) showAiStatus("初回のみ文字認識データ（約30MB）を読み込みます。Wi-Fiでの利用をおすすめします。");
+  const photo = await db.get("photos", item.photoId);
+  const { readNet } = await import("./js/ocr.js");
+  const r = await readNet(photo.blob);
+  if (!ready) {
+    await db.setMeta("ocrReady", true);
+    showAiStatus("");
+  }
+  const draft = item.slips[0] ?? (item.slips[0] = emptyDraft());
+  const crop = r.netBox ? await cropDataUrl(photo.blob, r.netBox).catch(() => null) : null;
+  draft.ocr = { netKg: r.netKg, confidence: r.confidence, candidates: r.candidates, crop };
+  // 読み取り中に手で入れた値は上書きしない
+  if (r.netKg != null && (draft.netKg == null || draft.netKg === "")) {
+    draft.netKg = r.netKg;
+    draft.uncertain = r.confidence === "high" ? [] : ["netKg"];
+  }
+  if (r.netKg == null) {
+    item.status = "manual";
+    item.message = r.candidates.length ? "正味を特定できませんでした。下の候補から選ぶか入力してください" : "正味を読み取れませんでした。入力してください";
+  } else {
+    item.status = r.confidence === "high" ? "ok" : "review";
+    item.message = r.confidence === "low" ? "全重−風袋と正味が合いません。写真で確認してください" : "";
+  }
 }
 
 async function callApi(photoBlob) {
@@ -284,62 +327,30 @@ async function callApi(photoBlob) {
       signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({ error: `サーバーエラー (${res.status})` }));
-    if (!res.ok) {
-      const err = new Error(data.error || `エラー (${res.status})`);
-      err.code = data.code;
-      err.retryable = data.retryable || res.status >= 500;
-      throw err;
-    }
+    if (!res.ok) throw new Error(data.error || `エラー (${res.status})`);
     return { data, sites };
   } catch (e) {
-    if (e.name === "AbortError") Object.assign(e, { message: "時間切れです", retryable: true });
-    if (e instanceof TypeError) Object.assign(e, { message: "通信できません（圏外？）", retryable: true });
+    if (e.name === "AbortError") e.message = "時間切れです";
+    if (e instanceof TypeError) e.message = "通信できません（圏外？）";
     throw e;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function readItem(item) {
-  item.status = "reading";
-  item.error = "";
-  renderQueue();
-  try {
-    const photo = await db.get("photos", item.photoId);
-    let result;
-    try {
-      result = await limit(() => callApi(photo.blob));
-    } catch (e) {
-      if (!e.retryable) throw e;
-      result = await limit(() => callApi(photo.blob)); // 1回だけ自動再試行
-    }
-    const { data, sites } = result;
-    if (data.rotation_cw) {
-      const rotated = await rotatePhoto(photo.blob, data.rotation_cw);
-      await db.put("photos", { ...photo, blob: rotated.photo, thumb: rotated.thumb });
-      dropThumb(item.photoId);
-    }
-    item.slips = (data.slips ?? []).map((s) => draftFromAi(s, sites));
-    item.message = data.image_problem || "";
-    if (item.slips.length === 0) {
-      item.status = "error";
-      item.error = "伝票が見つかりませんでした。撮り直すか手入力してください";
-      item.slips = [emptyDraft()];
-    } else {
-      item.status = "review";
-    }
-  } catch (e) {
-    console.error(e);
-    item.status = "error";
-    item.error = e.message;
-    if (e.code === "not_configured") {
-      state.aiAvailable = false;
-      showAiStatus("AI読み取りが未設定のため、手入力モードで動いています（READMEの設定手順を参照）。");
-    }
-    if (item.slips.length === 0) item.slips = [emptyDraft()];
+async function readItemAi(item) {
+  const photo = await db.get("photos", item.photoId);
+  const { data, sites } = await callApi(photo.blob);
+  if (data.rotation_cw) {
+    const rotated = await rotatePhoto(photo.blob, data.rotation_cw);
+    await db.put("photos", { ...photo, blob: rotated.photo, thumb: rotated.thumb });
+    dropThumb(item.photoId);
   }
-  persistQueue();
-  renderQueue();
+  const slips = (data.slips ?? []).map((s) => draftFromAi(s, sites));
+  if (slips.length === 0) throw new Error("伝票が見つかりませんでした");
+  item.slips = slips;
+  item.message = data.image_problem || "";
+  item.status = slips.some((s) => s.uncertain.length) ? "review" : "ok";
 }
 
 function showAiStatus(msg) {
@@ -349,7 +360,7 @@ function showAiStatus(msg) {
 }
 
 function draftFromAi(s, sites) {
-  const d = { uncertain: [], ai: {} };
+  const d = { uncertain: [], ai: {}, ocr: null };
   for (const [aiKey, key] of Object.entries(AI_TO_APP)) {
     let v = s[aiKey];
     if (v == null) continue;
@@ -374,9 +385,15 @@ function draftFromAi(s, sites) {
 }
 
 // ---------- 確認待ちカード ----------
+const cardEls = new WeakMap();
+
 function renderQueue() {
   const q = $("#queue");
-  q.replaceChildren(...state.queue.map(renderCard));
+  q.replaceChildren(...state.queue.map((item) => {
+    const el = renderCard(item);
+    cardEls.set(item, el);
+    return el;
+  }));
   const n = state.queue.length;
   $("#emptyQueue").hidden = n > 0;
   $("#queueHead").hidden = n === 0;
@@ -385,40 +402,46 @@ function renderQueue() {
   $("#badge").textContent = n;
 }
 
+// 1枚だけ描き直す（他のカードで入力中の内容・フォーカスを壊さない）
+function updateCard(item) {
+  const old = cardEls.get(item);
+  if (!old || !old.isConnected) return renderQueue();
+  const el = renderCard(item);
+  cardEls.set(item, el);
+  old.replaceWith(el);
+}
+
 const STATUS_LABEL = {
-  reading: ["reading", "AI読み取り中…"],
-  review: ["review", "内容を確認してください"],
+  reading: ["reading", "文字を読み取り中…"],
+  ok: ["ready", "正味を自動入力しました（全重−風袋で検算済み）"],
+  review: ["review", "正味を自動入力しました：写真で確認してください"],
+  manual: ["review", "正味を入力してください"],
   error: ["error", "読み取れませんでした"],
-  manual: ["ready", "手入力"],
 };
 
 function renderCard(item) {
-  const [cls, label] = STATUS_LABEL[item.status];
-  const uncertainCount = item.slips.reduce((n, s) => n + (s.uncertain?.length ?? 0), 0);
+  const [cls, label] = STATUS_LABEL[item.status] ?? STATUS_LABEL.manual;
   const card = h("article", { class: "card" },
     h("div", { class: "card-head" },
       thumbImg(item.photoId, { onclick: () => showPhoto(item.photoId) }),
       h("div", { class: "card-status" },
         h("span", { class: `status ${cls}` }, label),
         item.slips.length > 1 && h("div", {}, `この写真に伝票が${item.slips.length}枚あります`),
-        item.status === "review" && uncertainCount > 0 && h("div", { class: "msg warn" }, `黄色の${uncertainCount}項目は写真と見比べてください`),
-        item.status === "review" && uncertainCount === 0 && h("div", { class: "msg" }, "念のため正味(kg)と日付を写真で確認してください"),
         item.error && h("div", { class: "msg err" }, item.error),
         item.message && h("div", { class: "msg warn" }, item.message),
+        h("div", { class: "hint" }, "写真をタップすると拡大できます"),
       ),
     ),
   );
-  if (item.status !== "reading") {
-    item.slips.forEach((draft, i) => card.append(renderSlipForm(item, draft, i)));
-  }
+  item.slips.forEach((draft, i) => card.append(renderSlipForm(item, draft, i)));
   card.append(h("div", { class: "card-actions" },
     h("button", { class: "btn btn-small btn-secondary", type: "button", title: "左に90°回転", onclick: () => rotateQueued(item, 270) }, "↺"),
     h("button", { class: "btn btn-small btn-secondary", type: "button", title: "右に90°回転", onclick: () => rotateQueued(item, 90) }, "↻"),
-    item.status !== "reading" && state.aiAvailable && h("button", { class: "btn btn-small btn-secondary", type: "button", onclick: () => readItem(item) }, "再読取"),
-    item.status !== "reading" && h("button", { class: "btn btn-small btn-secondary", type: "button", onclick: () => { item.slips.push(emptyDraft()); persistQueue(); renderQueue(); } }, "＋伝票"),
+    item.status !== "reading" && h("button", { class: "btn btn-small btn-secondary", type: "button", onclick: () => readItem(item) }, "再読取"),
+    h("button", { class: "btn btn-small btn-secondary", type: "button", onclick: () => { item.slips.push(emptyDraft()); persistQueue(); updateCard(item); } }, "＋伝票"),
     h("span", { class: "spacer" }),
     h("button", { class: "btn btn-small btn-danger", type: "button", onclick: () => discardItem(item) }, "破棄"),
-    item.status !== "reading" && h("button", { class: "btn btn-small btn-primary", type: "button", onclick: () => saveItem(item) }, "保存"),
+    h("button", { class: "btn btn-small btn-primary", type: "button", onclick: () => saveItem(item) }, "保存"),
   ));
   return card;
 }
@@ -427,7 +450,7 @@ function renderSlipForm(item, draft, index) {
   const wrap = h("div", { class: "slip" });
   if (item.slips.length > 1) {
     wrap.append(h("div", { class: "slip-title" }, `伝票 ${index + 1}`,
-      " ", h("button", { class: "btn btn-small btn-danger", type: "button", onclick: () => { item.slips.splice(index, 1); persistQueue(); renderQueue(); } }, "この伝票を除く")));
+      " ", h("button", { class: "btn btn-small btn-danger", type: "button", onclick: () => { item.slips.splice(index, 1); persistQueue(); updateCard(item); } }, "この伝票を除く")));
   }
   wrap.append(buildForm(draft, (key, value) => {
     draft[key] = value;
@@ -437,12 +460,29 @@ function renderSlipForm(item, draft, index) {
   return wrap;
 }
 
+function chipRow(values, format, onPick) {
+  return values.map((v) => h("button", { class: "chip", type: "button", onclick: () => onPick(v) }, format(v)));
+}
+
 // 伝票フォーム（確認待ち・一覧の編集で共用）
 function buildForm(values, onChange) {
   const frag = $("#slipFormTpl").content.cloneNode(true);
-  const grid = frag.querySelector(".grid");
-  fillSiteSelect(grid.querySelector("[name=siteId]"), { value: values.siteId, withNew: true, allowEmpty: true });
-  for (const el of grid.querySelectorAll("[name]")) {
+  const form = frag.querySelector(".slip-form");
+  fillSiteSelect(form.querySelector("[name=siteId]"), { value: values.siteId, withNew: true, allowEmpty: true });
+  const set = (key, v) => {
+    const el = form.querySelector(`[name=${key}]`);
+    el.value = v;
+    el.dispatchEvent(new Event("change"));
+  };
+  const renderChips = () => {
+    form.querySelector("[data-chips=material]").replaceChildren(
+      ...chipRow(materialChips(values.siteId).filter((m) => m !== values.material), (m) => m, (m) => set("material", m)));
+    const nets = netChips(values).filter((n) => Number(n) !== Number(values.netKg));
+    form.querySelector("[data-chips=netKg]").replaceChildren(
+      ...(nets.length ? [h("span", { class: "chip-label" }, "候補：")] : []),
+      ...chipRow(nets, (n) => kg(n), (n) => set("netKg", n)));
+  };
+  for (const el of form.querySelectorAll("[name]")) {
     const key = el.name;
     if (key !== "siteId") el.value = values[key] ?? "";
     if (values.uncertain?.includes(key)) el.classList.add("uncertain");
@@ -455,8 +495,14 @@ function buildForm(values, onChange) {
       }
       el.classList.remove("uncertain");
       onChange(key, NUMERIC.has(key) ? (v === "" ? null : Number(v)) : v.trim());
+      if (["siteId", "material", "netKg"].includes(key)) renderChips();
     });
   }
+  if (values.ocr?.crop) {
+    form.querySelector("[data-crop]").replaceChildren(
+      h("img", { src: values.ocr.crop, alt: "写真の正味欄（拡大）" }));
+  }
+  renderChips();
   return frag;
 }
 
@@ -465,7 +511,7 @@ async function rotateQueued(item, deg) {
   const r = await rotatePhoto(p.blob, deg);
   await db.put("photos", { ...p, blob: r.photo, thumb: r.thumb });
   dropThumb(item.photoId);
-  renderQueue();
+  updateCard(item);
 }
 
 async function discardItem(item) {
@@ -493,12 +539,20 @@ function toRecord(draft, photoId) {
   for (const f of FIELDS) rec[f] = draft[f] ?? null;
   rec.consignee = draft.consignee ?? null;
   rec.documentType = draft.documentType ?? null;
-  rec.source = draft.ai ? "ai" : "manual";
-  rec.edited = draft.ai ? FIELDS.some((f) => String(draft.ai[f] ?? "") !== String(rec[f] ?? "")) : false;
+  if (draft.ai) {
+    rec.source = "ai";
+    rec.edited = FIELDS.some((f) => String(draft.ai[f] ?? "") !== String(rec[f] ?? ""));
+  } else if (draft.ocr?.netKg != null) {
+    rec.source = "ocr";
+    rec.edited = Number(draft.ocr.netKg) !== Number(rec.netKg);
+  } else {
+    rec.source = "manual";
+    rec.edited = false;
+  }
   return rec;
 }
 
-// 手修正を覚えて次回から自動で直す（材料名・現場の振り分け）
+// 手修正を覚えて次回から自動で直す（AI読み取り時の材料名・現場の振り分け）
 async function learn(draft) {
   if (!draft.ai) return;
   let changed = false;
@@ -526,12 +580,6 @@ async function saveItem(item, { silent = false } = {}) {
     }
   }
   const recs = item.slips.map((d) => toRecord(d, item.photoId));
-  for (const rec of recs) {
-    const dup = findDuplicate(state.records, rec);
-    if (dup && !confirm(`同じ伝票番号（${rec.slipNo}・${fmtDate(rec.date)}・正味${kg(dup.netKg)}kg）が既に登録されています。それでも保存しますか？`)) {
-      return false;
-    }
-  }
   for (const [i, rec] of recs.entries()) {
     await db.put("records", rec);
     state.records.push(rec);
@@ -548,11 +596,11 @@ async function saveItem(item, { silent = false } = {}) {
 $("#saveAllBtn").addEventListener("click", async () => {
   const targets = state.queue.filter((x) => x.status !== "reading");
   const unsure = targets.reduce((n, x) => n + x.slips.reduce((m, s) => m + (s.uncertain?.length ?? 0), 0), 0);
-  if (unsure && !confirm(`確認が必要な項目（黄色）が${unsure}件残っています。このまま保存しますか？`)) return;
+  if (unsure && !confirm(`確認が必要な正味（黄色）が${unsure}件あります。写真と見比べましたか？このまま保存しますか？`)) return;
   let ok = 0;
   for (const item of targets) if (await saveItem(item, { silent: true })) ok++;
   const left = state.queue.length;
-  toast(`${ok}件保存しました${left ? `。${left}件は未保存です（未入力の項目があります）` : ""}`, 4000);
+  toast(`${ok}件保存しました${left ? `。${left}件は未保存です（未入力の項目があるか読み取り中です）` : ""}`, 4000);
 });
 
 // ---------- 一覧 ----------
@@ -589,7 +637,7 @@ function renderList() {
       ...rs.map((r) => h("div", { class: "row", onclick: () => editRecord(r) },
         thumbImg(r.photoId),
         h("div", { class: "main" },
-          h("div", {}, `No.${r.slipNo ?? "-"}　${r.material ?? ""}`),
+          h("div", {}, r.material ?? ""),
           h("small", {}, [siteName(r.siteId), r.carrier, r.vehicleNo && `車番${r.vehicleNo}`].filter(Boolean).join("／"))),
         h("div", { class: "kg" }, `${kg(r.netKg)} kg`),
       )),
@@ -667,7 +715,7 @@ function renderLedger() {
     h("tbody", {}, ...rows.map((r) => h("tr", { class: r.count ? "" : "zero" },
       h("td", {}, r.date.slice(5).replace("-", "/")),
       h("td", {}, ...two(r.count, `計${r.cumCount}`)),
-      h("td", { title: r.loads.map((x) => `No.${x.slipNo ?? "-"} ${kg(x.netKg)}`).join("\n") },
+      h("td", { title: r.loads.map((x) => kg(x.netKg)).join(" / ") },
         ...two(r.inKg ? kg(r.inKg) : "－", `計${kg(r.cumIn)}`)),
       h("td", {},
         h("input", {
@@ -784,6 +832,8 @@ function renderSettings() {
   }));
   $("#passcode").value = state.passcode;
   $("#autoRead").checked = state.autoRead;
+  $("#useAi").checked = state.useAi;
+  $("#aiSettings").hidden = !state.useAi;
   renderStorageInfo();
 }
 
@@ -820,14 +870,17 @@ $("#siteForm").addEventListener("submit", async (e) => {
 });
 $("#passcode").addEventListener("change", async (e) => {
   state.passcode = e.target.value.trim();
-  state.aiAvailable = true;
-  showAiStatus("");
   await db.setMeta("passcode", state.passcode);
   toast("保存しました");
 });
 $("#autoRead").addEventListener("change", async (e) => {
   state.autoRead = e.target.checked;
   await db.setMeta("autoRead", state.autoRead);
+});
+$("#useAi").addEventListener("change", async (e) => {
+  state.useAi = e.target.checked;
+  $("#aiSettings").hidden = !state.useAi;
+  await db.setMeta("useAi", state.useAi);
 });
 
 $("#backupBtn").addEventListener("click", async () => {
@@ -873,6 +926,7 @@ async function init() {
   state.currentSite = await db.getMeta("currentSite", "");
   state.passcode = await db.getMeta("passcode", "");
   state.autoRead = await db.getMeta("autoRead", true);
+  state.useAi = await db.getMeta("useAi", false);
   state.materialAliases = await db.getMeta("materialAliases", {});
   state.siteAliases = await db.getMeta("siteAliases", {});
   state.queue = await db.getMeta("queue", []);

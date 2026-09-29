@@ -72,4 +72,21 @@ export function imageSize(blob) {
   return withImage(blob, (img) => ({ width: img.naturalWidth, height: img.naturalHeight }));
 }
 
+// 写真の一部（伝票の正味欄など）を切り出して dataURL にする
+export function cropDataUrl(blob, box, { padX = 0.6, padY = 0.5, maxW = 640 } = {}) {
+  return withImage(blob, (img) => {
+    const bh = box.y1 - box.y0;
+    const x0 = Math.max(0, box.x0 - bh * padX);
+    const y0 = Math.max(0, box.y0 - bh * padY);
+    const x1 = Math.min(img.naturalWidth, box.x1 + bh * padX);
+    const y1 = Math.min(img.naturalHeight, box.y1 + bh * padY);
+    const s = Math.min(1.5, maxW / (x1 - x0));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round((x1 - x0) * s);
+    canvas.height = Math.round((y1 - y0) * s);
+    canvas.getContext("2d").drawImage(img, x0, y0, x1 - x0, y1 - y0, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.8);
+  });
+}
+
 export { loadImage };

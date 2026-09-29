@@ -94,12 +94,25 @@ main { max-width: 900px; margin: 0 auto; padding: 16px; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
 .grid label, .field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
 .grid .wide { grid-column: 1 / -1; }
+.grid .net input { font-size: 22px; font-weight: 700; min-height: 48px; }
+.crop:empty { display: none; }
+.crop img { display: block; max-width: 100%; max-height: 110px; border: 2px solid #e0b400; border-radius: 6px; background: #fff; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips:empty { display: none; }
+.chip {
+  min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--brand);
+  background: #eef4fa; color: var(--brand); font-weight: 600; font-size: 15px; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.chip-label { font-size: 12px; color: var(--muted); }
+details.more, details.advanced { margin-top: 8px; font-size: 14px; }
+details.more summary, details.advanced summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
 .grid input, .grid select, .field input, .filters select, .filters input, .inline-form input {
   width: 100%; min-height: 40px; padding: 6px 8px; font-size: 16px;
   border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text);
 }
 .grid input.uncertain { background: var(--uncertain); border-color: #e0b400; }
-@media (min-width: 640px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+
 
 .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
 .filters label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); flex: 1; min-width: 140px; }

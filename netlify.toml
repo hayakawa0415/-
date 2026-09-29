@@ -9,8 +9,25 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# 文字認識をマルチスレッドで動かすための設定（crossOriginIsolated）
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
 # service worker は常に最新を取得させる
 [[headers]]
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache"
+
+# 文字認識データ（約30MB）は長くキャッシュする
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
