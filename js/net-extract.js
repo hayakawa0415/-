@@ -1,4 +1,4 @@
-// OCR で得た文字の箱（text と座標）から「正味(kg)」を推定する。DOM 非依存の純粋関数
+// OCR で得た文字の箱（text と座標）から「正味(kg)」と「日付」を推定する。DOM 非依存の純粋関数
 // 住友大阪セメントの納品書: 全重 / 風袋 / 正味 が t 表記（例 24.020）で縦に並ぶ
 // 重さの表記は「24.020 t」「8,000kg」どちらも「整数部 × 1000 + 下3桁」で kg になる
 
@@ -91,4 +91,73 @@ export function extractNet(boxes) {
   }
   if (net != null) return { netKg: net, confidence: "medium", candidates, netBox: boxFor(net) };
   return { netKg: null, confidence: null, candidates, netBox: null };
+}
+
+// ---------- 日付 ----------
+// 住友: 「2026 年 05 月 20 日」（「2026年05」「月20」のように分かれて読まれることが多い）
+// UBE : 「年月日 26/08/05」（ドット印字の 0 を 8・9・6 と読み違えることがある）
+
+const DAY_MS = 86400000;
+const toIso = (y, m, d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+// 月・日の十の位は 0〜3 しかないので、0 の読み違い（8・9・6）を 0 に戻す
+function fixTens(s, maxTens) {
+  if (s.length === 2 && Number(s[0]) > maxTens && "869".includes(s[0])) return `0${s[1]}`;
+  return s;
+}
+
+function validDate(y, m, d) {
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+// 読み取った日付がありえる範囲か（未来すぎ・古すぎは読み違いとみなす）
+function plausible(iso, todayIso) {
+  const diff = (Date.parse(todayIso) - Date.parse(iso)) / DAY_MS;
+  return diff >= -1 && diff <= 180;
+}
+
+function candidateDates(text) {
+  const t = String(text).normalize("NFKC").replace(/\s+/g, "");
+  const out = [];
+  // 2026年05月20 / 2026年055月23（重複読み）にも対応
+  const jp = t.match(/(20\d{2})年(\d{1,2})/);
+  const day = t.match(/月(\d{1,2})/);
+  if (jp && day) out.push([Number(jp[1]), fixTens(jp[2], 1), fixTens(day[1], 3)]);
+  // 26/08/05 形式
+  for (const m of t.matchAll(/(?<!\d)(\d{2})\/(\d{1,2})\/(\d{1,2})/g)) {
+    out.push([2000 + Number(m[1]), fixTens(m[2], 1), fixTens(m[3], 3)]);
+  }
+  // 2026/05/20, 2026.5.20
+  for (const m of t.matchAll(/(20\d{2})[/.-](\d{1,2})[/.-](\d{1,2})/g)) out.push([Number(m[1]), m[2], m[3]]);
+  return out.map(([y, m, d]) => [y, Number(m), Number(d)]);
+}
+
+// 同じ行の箱を左から順につなげた文字列
+function rowText(anchor, boxes) {
+  const h = anchor.y1 - anchor.y0;
+  const c = (anchor.y0 + anchor.y1) / 2;
+  const row = boxes.filter((b) => Math.abs((b.y0 + b.y1) / 2 - c) < h * 0.7).sort((a, b) => a.x0 - b.x0);
+  return { text: row.map((b) => b.text).join(""), box: row.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }), anchor) };
+}
+
+// 戻り値: { date: "YYYY-MM-DD" | null, confidence: "high" | "medium" | null, dateBox }
+export function extractDate(boxes, todayIso) {
+  const anchors = boxes.filter((b) => /年|月日|\d{2}\/\d/.test(String(b.text).normalize("NFKC")));
+  const thisYear = Number(todayIso.slice(0, 4));
+  let fallback = null;
+  for (const anchor of anchors) {
+    const { text, box } = rowText(anchor, boxes);
+    for (const [y, m, d] of candidateDates(text)) {
+      if (!validDate(y, m, d)) continue;
+      const iso = toIso(y, m, d);
+      if (plausible(iso, todayIso)) return { date: iso, confidence: "high", dateBox: box };
+      // 年だけ読み違えた可能性（例 25/8/26）：今年に直して範囲内なら要確認で採用
+      for (const yy of [thisYear, thisYear - 1]) {
+        const alt = toIso(yy, m, d);
+        if (validDate(yy, m, d) && plausible(alt, todayIso)) fallback ??= { date: alt, confidence: "medium", dateBox: box };
+      }
+    }
+  }
+  return fallback ?? { date: null, confidence: null, dateBox: null };
 }

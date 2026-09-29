@@ -291,27 +291,37 @@ async function readItemLocal(item) {
   const ready = await db.getMeta("ocrReady", false);
   if (!ready) showAiStatus("初回のみ文字認識データ（約30MB）を読み込みます。Wi-Fiでの利用をおすすめします。");
   const photo = await db.get("photos", item.photoId);
-  const { readNet } = await import("./js/ocr.js");
-  const r = await readNet(photo.blob);
+  const { readSlip } = await import("./js/ocr.js");
+  const r = await readSlip(photo.blob, todayIso());
   if (!ready) {
     await db.setMeta("ocrReady", true);
     showAiStatus("");
   }
   const draft = item.slips[0] ?? (item.slips[0] = emptyDraft());
-  const crop = r.netBox ? await cropDataUrl(photo.blob, r.netBox).catch(() => null) : null;
-  draft.ocr = { netKg: r.netKg, confidence: r.confidence, candidates: r.candidates, crop };
+  const crop = (box) => (box ? cropDataUrl(photo.blob, box).catch(() => null) : null);
+  draft.ocr = {
+    netKg: r.netKg, confidence: r.confidence, candidates: r.candidates, crop: await crop(r.netBox),
+    date: r.date, dateConfidence: r.dateConfidence, dateCrop: await crop(r.dateBox),
+  };
+  const uncertain = new Set(draft.uncertain ?? []);
   // 読み取り中に手で入れた値は上書きしない
   if (r.netKg != null && (draft.netKg == null || draft.netKg === "")) {
     draft.netKg = r.netKg;
-    draft.uncertain = r.confidence === "high" ? [] : ["netKg"];
+    r.confidence === "high" ? uncertain.delete("netKg") : uncertain.add("netKg");
   }
-  if (r.netKg == null) {
-    item.status = "manual";
-    item.message = r.candidates.length ? "正味を特定できませんでした。下の候補から選ぶか入力してください" : "正味を読み取れませんでした。入力してください";
-  } else {
-    item.status = r.confidence === "high" ? "ok" : "review";
-    item.message = r.confidence === "low" ? "全重−風袋と正味が合いません。写真で確認してください" : "";
+  if (r.date && !draft.dateTouched) {
+    draft.date = r.date;
+    r.dateConfidence === "high" ? uncertain.delete("date") : uncertain.add("date");
+  } else if (!r.date && !draft.dateTouched) {
+    uncertain.add("date"); // 撮影日のまま
   }
+  draft.uncertain = [...uncertain];
+  const notes = [];
+  if (r.netKg == null) notes.push(r.candidates.length ? "正味を特定できませんでした。候補から選ぶか入力してください" : "正味を読み取れませんでした。入力してください");
+  if (r.confidence === "low") notes.push("全重−風袋と正味が合いません。写真で確認してください");
+  if (!r.date) notes.push("日付を読み取れなかったため撮影日を入れました");
+  item.message = notes.join("／");
+  item.status = r.netKg == null ? "manual" : r.confidence === "high" && r.dateConfidence === "high" ? "ok" : "review";
 }
 
 async function callApi(photoBlob) {
@@ -413,8 +423,8 @@ function updateCard(item) {
 
 const STATUS_LABEL = {
   reading: ["reading", "文字を読み取り中…"],
-  ok: ["ready", "正味を自動入力しました（全重−風袋で検算済み）"],
-  review: ["review", "正味を自動入力しました：写真で確認してください"],
+  ok: ["ready", "日付・正味を自動入力しました（正味は全重−風袋で検算済み）"],
+  review: ["review", "自動入力しました：黄色の項目を写真で確認してください"],
   manual: ["review", "正味を入力してください"],
   error: ["error", "読み取れませんでした"],
 };
@@ -454,6 +464,7 @@ function renderSlipForm(item, draft, index) {
   }
   wrap.append(buildForm(draft, (key, value) => {
     draft[key] = value;
+    if (key === "date") draft.dateTouched = true;
     draft.uncertain = (draft.uncertain ?? []).filter((f) => f !== key);
     persistQueue();
   }));
@@ -499,8 +510,10 @@ function buildForm(values, onChange) {
     });
   }
   if (values.ocr?.crop) {
-    form.querySelector("[data-crop]").replaceChildren(
-      h("img", { src: values.ocr.crop, alt: "写真の正味欄（拡大）" }));
+    form.querySelector("[data-crop=netKg]").replaceChildren(h("img", { src: values.ocr.crop, alt: "写真の正味欄（拡大）" }));
+  }
+  if (values.ocr?.dateCrop) {
+    form.querySelector("[data-crop=date]").replaceChildren(h("img", { src: values.ocr.dateCrop, alt: "写真の日付欄（拡大）" }));
   }
   renderChips();
   return frag;
@@ -542,9 +555,9 @@ function toRecord(draft, photoId) {
   if (draft.ai) {
     rec.source = "ai";
     rec.edited = FIELDS.some((f) => String(draft.ai[f] ?? "") !== String(rec[f] ?? ""));
-  } else if (draft.ocr?.netKg != null) {
+  } else if (draft.ocr?.netKg != null || draft.ocr?.date) {
     rec.source = "ocr";
-    rec.edited = Number(draft.ocr.netKg) !== Number(rec.netKg);
+    rec.edited = (draft.ocr.netKg != null && Number(draft.ocr.netKg) !== Number(rec.netKg)) || (!!draft.ocr.date && draft.ocr.date !== rec.date);
   } else {
     rec.source = "manual";
     rec.edited = false;
@@ -596,7 +609,7 @@ async function saveItem(item, { silent = false } = {}) {
 $("#saveAllBtn").addEventListener("click", async () => {
   const targets = state.queue.filter((x) => x.status !== "reading");
   const unsure = targets.reduce((n, x) => n + x.slips.reduce((m, s) => m + (s.uncertain?.length ?? 0), 0), 0);
-  if (unsure && !confirm(`確認が必要な正味（黄色）が${unsure}件あります。写真と見比べましたか？このまま保存しますか？`)) return;
+  if (unsure && !confirm(`確認が必要な項目（黄色）が${unsure}件あります。写真と見比べましたか？このまま保存しますか？`)) return;
   let ok = 0;
   for (const item of targets) if (await saveItem(item, { silent: true })) ok++;
   const left = state.queue.length;

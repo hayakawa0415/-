@@ -34,7 +34,7 @@
           写真を選ぶ（複数可）
         </label>
       </div>
-      <p class="hint">伝票を平らな所に置き、<strong>縦向きで枠いっぱいに1枚ずつ</strong>撮ってください。正味は自動で読み取ります。続けて何枚でも撮影できます。</p>
+      <p class="hint">伝票を平らな所に置き、<strong>縦向きで枠いっぱいに1枚ずつ</strong>撮ってください。日付と正味は自動で読み取ります。続けて何枚でも撮影できます。</p>
       <div id="aiStatus" class="notice" hidden></div>
       <div class="queue-head" id="queueHead" hidden>
         <h2>確認待ち <span id="queueCount"></span></h2>
@@ -86,7 +86,7 @@
       <ul id="siteList" class="site-list"></ul>
 
       <h2>自動読み取り</h2>
-      <label class="check"><input id="autoRead" type="checkbox" checked> 撮影したら正味を自動で読み取る（端末内で処理・無料）</label>
+      <label class="check"><input id="autoRead" type="checkbox" checked> 撮影したら日付と正味を自動で読み取る（端末内で処理・無料）</label>
       <p class="hint">住友大阪セメントの納品書（全重・風袋・正味）と、UBE三菱セメントの送り状（正味量）で確認済みです。読み取った値は必ず写真と見比べてください。</p>
       <details class="advanced">
         <summary>有料のAI読み取りを使う（任意）</summary>
@@ -127,9 +127,10 @@
       <div class="grid">
         <label>現場<select name="siteId"></select></label>
         <label>日付<input name="date" type="date" required></label>
+        <div class="wide crop" data-crop="date"></div>
         <label class="wide">材料(品種)<input name="material" list="materialList" required></label>
         <div class="chips wide" data-chips="material"></div>
-        <div class="wide crop" data-crop></div>
+        <div class="wide crop" data-crop="netKg"></div>
         <label class="wide net">正味(kg)<input name="netKg" type="number" inputmode="numeric" step="any" required></label>
         <div class="chips wide" data-chips="netKg"></div>
       </div>

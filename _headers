@@ -1,0 +1,14 @@
+# 文字認識をマルチスレッドで動かすための設定（crossOriginIsolated）
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+# service worker は常に最新を取得させる
+/sw.js
+  Cache-Control: no-cache
+
+# 文字認識データ（約30MB）とライブラリは長くキャッシュする
+/models/*
+  Cache-Control: public, max-age=2592000
+/vendor/*
+  Cache-Control: public, max-age=2592000

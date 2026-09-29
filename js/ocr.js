@@ -1,5 +1,5 @@
 // 端末内OCR（Web Worker）の呼び出し口
-import { extractNet } from "./net-extract.js";
+import { extractNet, extractDate } from "./net-extract.js";
 
 let worker;
 let seq = 0;
@@ -32,18 +32,25 @@ export function recognize(blob, pass) {
   });
 }
 
-// まず「縮小＋ぼかし」で読み、読めない・計算が合わない時だけ高解像度でも読んで良い方を採る
-export async function readNet(blob) {
+// まず「縮小＋ぼかし」で読み、正味か日付が取れない時だけ高解像度でも読んで補う
+export async function readSlip(blob, todayIso) {
   const run = async (pass) => {
     const { boxes, timing } = await recognize(blob, pass);
-    return { ...extractNet(boxes), boxes, timing, pass };
+    return { net: extractNet(boxes), date: extractDate(boxes, todayIso), timing, pass };
   };
   const soft = await run("soft");
-  // 検算できた、または「正味」欄から読めた場合はそれで確定（2回目は時間がかかるため省く）
-  if (soft.confidence === "high" || soft.confidence === "medium") return soft;
+  const netOk = (r) => r.net.confidence === "high" || r.net.confidence === "medium";
+  if (netOk(soft) && soft.date.date) return merge(soft, soft);
   const sharp = await run("sharp");
-  if (sharp.confidence === "high") return sharp;
-  const rank = { medium: 2, low: 1 };
-  const best = (rank[sharp.confidence] ?? 0) > (rank[soft.confidence] ?? 0) ? sharp : soft;
-  return { ...best, candidates: [...new Set([...soft.candidates, ...sharp.candidates])] };
+  const rank = { high: 3, medium: 2, low: 1 };
+  const net = (rank[sharp.net.confidence] ?? 0) > (rank[soft.net.confidence] ?? 0) ? sharp : soft;
+  const date = soft.date.date ? soft : sharp;
+  return merge(net, date, [...new Set([...soft.net.candidates, ...sharp.net.candidates])]);
+}
+
+function merge(netRun, dateRun, candidates = netRun.net.candidates) {
+  return {
+    netKg: netRun.net.netKg, confidence: netRun.net.confidence, candidates, netBox: netRun.net.netBox,
+    date: dateRun.date.date, dateConfidence: dateRun.date.confidence, dateBox: dateRun.date.dateBox,
+  };
 }
