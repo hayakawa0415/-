@@ -1,0 +1,10 @@
+{
+  "name": "nouhinsho-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "納品書をスマホで撮影し、AIで読み取って現場別にExcel集計・写真台帳化するWebアプリ",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
+  }
+}

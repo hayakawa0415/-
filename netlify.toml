@@ -1,11 +1,12 @@
+# 配信ヘッダーは _headers に記載（Netlify Drop でも効くように）
 [build]
   publish = "."
   command = ""
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "22"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# （任意）有料AI読み取り用の関数。Git 連携でデプロイした時だけ有効
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"

@@ -1,0 +1,4 @@
+det.onnx / rec.onnx / rec_keys.txt
+  PaddleOCR PP-OCRv4 (ch) の検出・認識モデル（RapidOCR が配布している ONNX 変換版）
+  https://github.com/PaddlePaddle/PaddleOCR / https://github.com/RapidAI/RapidOCR
+  License: Apache License 2.0
