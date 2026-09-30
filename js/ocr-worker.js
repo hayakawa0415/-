@@ -4,12 +4,16 @@ import * as ort from "../vendor/ort/ort.wasm.bundle.min.mjs";
 
 const BASE = new URL("../", import.meta.url).href;
 ort.env.wasm.wasmPaths = `${BASE}vendor/ort/`;
-ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+// ?threads=1 で起動された場合は1スレッド（複数スレッドが使えない端末向けの予備）
+const forceSingle = new URL(self.location.href).searchParams.get("threads") === "1";
+ort.env.wasm.numThreads = !forceSingle && self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 
 // ドット印字は「少し縮小して軽くぼかす」と点がつながって読めるようになる（サンプル伝票で検証済み）
 const PASSES = {
   soft: { longSide: 1024, blur: true },
   sharp: { longSide: 1400, blur: false },
+  // 伝票が写真の中で小さく写っている時用
+  large: { longSide: 2000, blur: true },
 };
 const DET_THRESH = 0.3;
 const BOX_THRESH = 0.5;
@@ -203,9 +207,14 @@ async function recognize(rec, dict, bitmap, boxes) {
 
 self.onmessage = async (e) => {
   const { id, blob, pass = "soft" } = e.data;
+  let stage = "init";
   try {
+    if (typeof OffscreenCanvas === "undefined") {
+      throw new Error("この端末のブラウザは自動読み取りに未対応です（iPhoneは iOS 16.4 以降が必要）");
+    }
     const t0 = performance.now();
     const { det, rec, dict } = await engine();
+    stage = "run";
     const t1 = performance.now();
     const bitmap = await createImageBitmap(blob);
     const { canvas, scale } = workImage(bitmap, PASSES[pass]);
@@ -218,6 +227,6 @@ self.onmessage = async (e) => {
     const t3 = performance.now();
     self.postMessage({ id, boxes: results, timing: { load: t1 - t0, det: t2 - t1, rec: t3 - t2 } });
   } catch (err) {
-    self.postMessage({ id, error: String(err?.message ?? err) });
+    self.postMessage({ id, error: String(err?.message ?? err), stage, threads: ort.env.wasm.numThreads });
   }
 };

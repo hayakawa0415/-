@@ -281,6 +281,7 @@ async function readItem(item) {
     console.error(e);
     item.status = "manual";
     item.error = `自動読み取りできませんでした（${e.message}）。正味を入力してください`;
+    item.debug = { error: String(e.stack || e.message || e).slice(0, 500) };
   } finally {
     persistQueue();
     updateCard(item);
@@ -293,6 +294,7 @@ async function readItemLocal(item) {
   const photo = await db.get("photos", item.photoId);
   const { readSlip } = await import("./js/ocr.js");
   const r = await readSlip(photo.blob, todayIso());
+  item.debug = r.debug;
   if (!ready) {
     await db.setMeta("ocrReady", true);
     showAiStatus("");
@@ -443,6 +445,17 @@ function renderCard(item) {
       ),
     ),
   );
+  if (item.debug && item.status !== "reading") {
+    const d = item.debug;
+    card.append(h("details", { class: "more debug" },
+      h("summary", {}, "読み取りの詳細（うまく読めない時はこの画面を送ってください）"),
+      h("pre", {}, [
+        `端末: ${navigator.userAgent}`,
+        `分離: ${self.crossOriginIsolated ? "有" : "無"} / スレッド: ${d.threads ?? "-"} / 処理: ${d.passes ?? "-"}`,
+        d.error ? `エラー: ${d.error}` : `読めた文字: ${(d.texts ?? []).join(" | ")}`,
+      ].join("\n")),
+    ));
+  }
   item.slips.forEach((draft, i) => card.append(renderSlipForm(item, draft, i)));
   card.append(h("div", { class: "card-actions" },
     h("button", { class: "btn btn-small btn-secondary", type: "button", title: "左に90°回転", onclick: () => rotateQueued(item, 270) }, "↺"),
